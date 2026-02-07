@@ -73,11 +73,14 @@ func (cb *CircularBuffer) AddMany(values ...float64) error {
 			return ErrInvalidValue
 		}
 	}
-	
+
 	// Add all values
 	for _, value := range values {
-		// We already validated, so this should never error
-		_ = cb.Add(value)
+		// We already validated, so this should never error.
+		// If it does, it indicates a programming error in Add().
+		if err := cb.Add(value); err != nil {
+			panic("circularbuffer: unexpected error after validation: " + err.Error())
+		}
 	}
 	return nil
 }
