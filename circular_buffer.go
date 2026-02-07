@@ -14,6 +14,8 @@ var (
 	ErrBufferEmpty = errors.New("circularbuffer: buffer is empty")
 	// ErrInsufficientData indicates more items are required for the operation.
 	ErrInsufficientData = errors.New("circularbuffer: need at least two values to calculate standard deviation")
+	// ErrInvalidValue indicates the caller tried to add an invalid value (NaN or Inf).
+	ErrInvalidValue = errors.New("circularbuffer: value must be a finite number (not NaN or Inf)")
 )
 
 // CircularBuffer implements a fixed-size buffer that overwrites oldest data when full
@@ -40,8 +42,13 @@ func NewCircularBuffer(capacity int) (*CircularBuffer, error) {
 	}, nil
 }
 
-// Add adds a value to the buffer, overwriting the oldest value if the buffer is full
-func (cb *CircularBuffer) Add(value float64) {
+// Add adds a value to the buffer, overwriting the oldest value if the buffer is full.
+// Returns an error if the value is NaN or Inf, which would corrupt statistical calculations.
+func (cb *CircularBuffer) Add(value float64) error {
+	if math.IsNaN(value) || math.IsInf(value, 0) {
+		return ErrInvalidValue
+	}
+
 	if cb.size == cb.capacity {
 		overwritten := cb.data[cb.head]
 		cb.sum -= overwritten
@@ -54,13 +61,25 @@ func (cb *CircularBuffer) Add(value float64) {
 	cb.sum += value
 	cb.sumSquares += value * value
 	cb.head = (cb.head + 1) % cb.capacity
+	return nil
 }
 
 // AddMany appends several values to the buffer in order.
-func (cb *CircularBuffer) AddMany(values ...float64) {
+// Returns an error if any value is NaN or Inf. If an error occurs, no values are added.
+func (cb *CircularBuffer) AddMany(values ...float64) error {
+	// Validate all values first to ensure atomicity
 	for _, value := range values {
-		cb.Add(value)
+		if math.IsNaN(value) || math.IsInf(value, 0) {
+			return ErrInvalidValue
+		}
 	}
+	
+	// Add all values
+	for _, value := range values {
+		// We already validated, so this should never error
+		_ = cb.Add(value)
+	}
+	return nil
 }
 
 // Get returns the value at the specified index (0 is the oldest, size-1 is the newest)
