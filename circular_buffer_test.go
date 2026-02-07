@@ -1,6 +1,7 @@
 package core
 
 import (
+	"math"
 	"testing"
 )
 
@@ -29,9 +30,15 @@ func TestCircularBuffer(t *testing.T) {
 	}
 
 	// Test adding values
-	buffer.Add(1.0)
-	buffer.Add(2.0)
-	buffer.Add(3.0)
+	if err := buffer.Add(1.0); err != nil {
+		t.Fatalf("Failed to add value: %v", err)
+	}
+	if err := buffer.Add(2.0); err != nil {
+		t.Fatalf("Failed to add value: %v", err)
+	}
+	if err := buffer.Add(3.0); err != nil {
+		t.Fatalf("Failed to add value: %v", err)
+	}
 
 	if buffer.Size() != 3 {
 		t.Errorf("Expected size 3, got %d", buffer.Size())
@@ -181,5 +188,63 @@ func TestAddMany(t *testing.T) {
 	mean, err := buffer.Mean()
 	if err != nil || mean != 3 {
 		t.Fatalf("Expected mean 3, got %f", mean)
+	}
+}
+
+// TestInvalidValues tests that NaN and Inf are properly rejected
+func TestInvalidValues(t *testing.T) {
+	buffer, err := NewCircularBuffer(5)
+	if err != nil {
+		t.Fatalf("Failed to create buffer: %v", err)
+	}
+
+	// Test adding NaN
+	err = buffer.Add(math.NaN())
+	if err == nil {
+		t.Error("Expected error when adding NaN")
+	}
+	if err != ErrInvalidValue {
+		t.Errorf("Expected ErrInvalidValue, got %v", err)
+	}
+
+	// Test adding positive infinity
+	err = buffer.Add(math.Inf(1))
+	if err == nil {
+		t.Error("Expected error when adding +Inf")
+	}
+	if err != ErrInvalidValue {
+		t.Errorf("Expected ErrInvalidValue, got %v", err)
+	}
+
+	// Test adding negative infinity
+	err = buffer.Add(math.Inf(-1))
+	if err == nil {
+		t.Error("Expected error when adding -Inf")
+	}
+	if err != ErrInvalidValue {
+		t.Errorf("Expected ErrInvalidValue, got %v", err)
+	}
+
+	// Test AddMany with invalid value
+	err = buffer.AddMany(1.0, 2.0, math.NaN(), 4.0)
+	if err == nil {
+		t.Error("Expected error when adding values including NaN")
+	}
+	if err != ErrInvalidValue {
+		t.Errorf("Expected ErrInvalidValue, got %v", err)
+	}
+
+	// Verify buffer is still empty (atomicity - no values added on error)
+	if buffer.Size() != 0 {
+		t.Errorf("Expected size 0 after failed AddMany, got %d", buffer.Size())
+	}
+
+	// Test that valid values work
+	err = buffer.AddMany(1.0, 2.0, 3.0)
+	if err != nil {
+		t.Errorf("Failed to add valid values: %v", err)
+	}
+	if buffer.Size() != 3 {
+		t.Errorf("Expected size 3, got %d", buffer.Size())
 	}
 }
